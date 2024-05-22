@@ -111,5 +111,92 @@ def get_V_mat_element(H,i,j):
     v = np.vstack((v1,v2,v3,v4,v5,v6))
     return v
 
+def get_V_mat(H):
+    """
+    description:
+        calculate V for a given homograply
+    input:
+        H - homography matrix 3x3
+    output:
+        V - 2x6 V matrix
+    """
+    V1 = get_V_mat_element(H,1,2)
+    V1 = V1.T
+    V20 = get_V_mat_element(H,1,1)
+    V20 = V20.T
+    V21 = get_V_mat_element(H,2,2)
+    V21 = V21.T
+    V2 = V20 - V21
+    V = np.vstack((V1,V2))
 
+    return V
 
+def get_L_mat(img_corner, world_corner):
+    """
+    description:
+         calcilate L for a given img_corner and world_corner
+    input:
+        immage_corner - 2,
+        world_corners - 3,
+    output:
+        L - as per pap convention 2x9
+    """
+    L1 = np.hstack((world_corner, np.zeros(3), -img_corner[0]*world_corner))
+    L2 = np.hstack((np.zeros(3), world_corner, -img_corner[1]*world_corner))
+    L = np.vstack((L1, L2))
+    return L
+
+def get_homography(img_corners, world_corners, name):
+    world_corners = np.hstack((world_corners, np.ones((world_corners.shape[0], 1))))
+    L = tuple([get_L_mat(img_corner, world_corner) for img_corner, world_corner in zip(img_corners, world_corners)])
+    L = np.vstack(L)
+    eig_val, eig_vec = np.linalg.eig(L.T @ L)
+    min_eig_vec_ind = np.argmin(eig_val)
+    min_eig_vec = eig_vec[:,min_eig_vec_ind]
+
+    h1 = min_eig_vec[0:3]
+    h2 = min_eig_vec[3:6]
+    h3 = min_eig_vec[6:9]
+
+    H = np.vstack((h1, h2, h3))
+    H = H/H[2,2]
+
+    return H
+
+def get_camera_intrinsic_from_b(b):
+    """
+    description:
+        retiirn camera intrinstics given b vector from paper
+    input:
+        b - vector as per convention from paper
+    output:
+        camera intrinsic matix 3x3
+    """
+    B11 = b[0]
+    B12 = b[1]
+    B22 = b[2]
+    B13 = b[3]
+    B23 = b[4]
+    B33 = b[5]
+
+    v0_num = B12*B13 - B11*B23
+    v0_den = B11*B22 - B12*B12
+    v0 = v0_num/v0_den
+
+    lambda1_num = B13*B13 + v0*(B12*B13 - B11*B23)
+    lamda = B33 - lambda1_num/B11
+    
+    alpha = (lamda/B11)**(0.5)
+
+    beta_num = lamda*B11
+    beta_den = B11*B22 - B11*B12
+    beta = (beta_num/beta_den)**(0.5)
+
+    gamma = (-B12*alpha*alpha*beta)/lamda
+
+    u00 = (gamma*v0)/beta
+    u01 = (B13*alpha*alpha)/lamda
+    u0 = u00 - u01
+
+    A = convert_A_vector_to_matrix([alpha, gamma, beta, u0, v0])
+    return A, lamda
