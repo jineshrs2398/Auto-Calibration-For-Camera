@@ -369,7 +369,7 @@ def inverse_warp(img,A,k1,k2):
     res_v = ((v_grid - v0)/beta)
 
     r_2 = res_u**2 + res_v**2
-    r_4 = r_2**4
+    r_4 = r_2**2
     factor = k1*r_2 + k2*r_4
 
     u_grid_old = u_grid + (u_grid - u0)*factor
