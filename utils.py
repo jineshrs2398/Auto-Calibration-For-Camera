@@ -365,6 +365,8 @@ def inverse_warp(img,A,k1,k2):
     v_grid = v_grid.flatten()
 
     alpha,gamma,beta,u0,v0 = convert_A_matrix_to_vector(A)
+
+    #Converts pixel coordinates to normalized coordinates
     res_u = ((u_grid - u0)/alpha)
     res_v = ((v_grid - v0)/beta)
 
@@ -372,15 +374,22 @@ def inverse_warp(img,A,k1,k2):
     r_4 = r_2**2
     factor = k1*r_2 + k2*r_4
 
+    #Adjusts the grid coordinates by applying the distortion factor, 
+    #resulting in the "old" grid coordinates.
+
     u_grid_old = u_grid + (u_grid - u0)*factor
     v_grid_old = v_grid + (v_grid - v0)*factor
 
     u_grid_old = u_grid_old.astype(int)
     v_grid_old = v_grid_old.astype(int)
 
-    u_grid_old, v_grid_old, u_grid, v_grid = filter_coords(\
+    #Uses the filter_coords function to remove coordinates 
+    # that fall outside the valid image boundaries.
+    u_grid_old, v_grid_old, u_grid, v_grid = filter_coords(
                 u_grid_old,v_grid_old,u_grid,v_grid,img.shape)
     
+    # Creates a new image by mapping the old grid coordinates (distorted) 
+    # to the new grid coordinates (rectified).
     new_img = np.zeros_like(img)
     new_img[v_grid,u_grid,:] = img[v_grid_old,u_grid_old,:]
     return new_img
