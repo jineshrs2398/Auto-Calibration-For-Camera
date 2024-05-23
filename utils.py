@@ -294,7 +294,7 @@ def projection_error(transformation,A,k1,k2,img_corners,world_corners):
     error = np.linalg.norm(error,axis=0,ord=2)
     return error
 
-def get_projection(transformations,A,k1,k2,world_corners):
+def get_projections(transformations,A,k1,k2,world_corners):
     projections = []
     for transformation in transformations:
         projections.append(get_projection(transformation,A,k1,k2,world_corners))
@@ -329,3 +329,58 @@ def compute_residuals(x, imgs_corners,world_corners,per_img=False):
     if not per_img:
         errors = np.concatenate(errors)
     return errors
+
+def filter_coords(u_grid_old,v_grid_old,u_grid,v_grid,img_shape):
+    inds_max_v = np.argswhere(v_grid_old>img_shape[0]-1)
+    inds_max_u = np.argswhere(u_grid_old>img_shape[1]-1)
+
+    inds_max = np.concatenate((inds_max_v, inds_max_u)).flatten().tolist()
+    exclude_inds = list(set(tuple(inds_max)))
+    if exclude_inds.shape[0] <= 0:
+        return u_grid_old,v_grid_old,u_grid,v_grid
+    
+    u_grid_old = np.delete(u_grid_old,exclude_inds,axis=0)
+    v_grid_old = np.delete(v_grid_old,exclude_inds,axis=0)
+    u_grid = np.delete(u_grid,exclude_inds,axis=0)
+    v_grid = np.delete(v_grid,exclude_inds,axis=0)
+
+    return u_grid_old,v_grid_old,u_grid,v_grid
+
+def inverse_warp(img,A,k1,k2):
+    """ 
+    description:
+        inverse warp the img based on the intrinsics and extrinsics
+    input:
+        img - original img
+        A - camera intrinsics
+        k1 - distortion parameter 1
+        k2 - distortion parameter 1
+    output:
+        rectified_img - image after rectification
+    """
+    u_lin = np.arange(0,img.shape[1],1)
+    v_lin = np.arange(0,img.shape[0],1)
+    u_grid,v_grid = np.meshgrid(u_lin,v_lin)
+    u_grid = u_grid.flatten()
+    v_grid = v_grid.flatten()
+
+    alpha,gamma,beta,u0,v0 = convert_A_matrix_to_vector(A)
+    res_u = ((u_grid - u0)/alpha)
+    res_v = ((v_grid - v0)/beta)
+
+    r_2 = res_u**2 + res_v**2
+    r_4 = r_2**4
+    factor = k1*r_2 + k2*r_4
+
+    u_grid_old = u_grid + (u_grid - u0)*factor
+    v_grid_old = v_grid + (v_grid - v0)*factor
+
+    u_grid_old = u_grid_old.astype(int)
+    v_grid_old = v_grid_old.astype(int)
+
+    u_grid_old, v_grid_old, u_grid, v_grid = filter_coords(\
+                u_grid_old,v_grid_old,u_grid,v_grid,img.shape)
+    
+    new_img = np.zeros_like(img)
+    new_img[v_grid,u_grid,:] = img[v_grid_old,u_grid_old,:]
+    return new_img
