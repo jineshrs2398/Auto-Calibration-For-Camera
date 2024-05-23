@@ -200,3 +200,132 @@ def get_camera_intrinsic_from_b(b):
 
     A = convert_A_vector_to_matrix([alpha, gamma, beta, u0, v0])
     return A, lamda
+
+def get_camera_intrinsics(homography_list):
+    """ 
+    desctiption:
+        calculate camera intrinsics based on thr paper
+    input:
+        homography_lost - lost of size N homography matices 3x3
+    output:
+        A - camera intrinsic matrix 3x3
+    """
+    V = tuple([get_V_mat(H) for H in homography_list])
+    V = np.vstack(V)
+    eig_val, eig_vec = np.linalg.eig(V.T @ V)
+    min_eig_vec_ind = np.argmin(eig_val)
+    min_eig_vec = eig_vec[:, min_eig_vec_ind]
+
+    A = get_camera_intrinsic_from_b(min_eig_vec)
+    return A
+
+def get_transformation_mat(A, lamba, H):
+    """ 
+    description:
+        calculate rotation and translation matrices for each image
+    input:
+    output:
+    """
+    A_inv = np.linalg.inv(A)
+    lamba1 = 1/np.linalg.norm(A_inv @ H[:,0], ord=2)
+    lamba2 = 1/np.linalg.norm(A_inv @ H[:,1], ord=2)
+
+    r1 = lamba1*A_inv @ H[:,0]
+    r2 = lamba2*A_inv @ H[:,1]
+    r3 = skew(r1) @ r2
+
+    t = lamba1*A_inv @ H[:,2]
+
+    R = np.vstack((r1,r2,r3)).T
+    r = scipyRot.from_matrix(R).as_mrp()
+
+    rt = np.concatenate((r,t.flatten()), axis=0).tolist()
+    return rt
+
+def distort_corners(x_c, k1, k2):
+    """ 
+    description:
+        distort corners based on the k1 and k2
+    input:
+        x_c - 3xM
+        k1 - distortion coefficient 1
+
+    """
+    x_c = x_c/x_c[2]
+    r_c2 = x_c[0]**2 + x_c[1]**2
+    factor = k1*r_c2 + k2*(r_c2**2)
+    x_h = x_c + x_c*factor
+    x_h[2] = 1
+    return x_h
+
+def get_projection(x, A, k1, k2, world_corners):
+    R = scipyRot.from_mrp(x[0:3]).as_matrix()
+    t = x[3:6].reshape((3,1))
+    T = np.hstack((R,t))
+
+    M = world_corners.shape[0]
+    zeros = np.zeros((M,1))
+    ones = np.ones((M,1))
+    world_corners = np.hstack((world_corners, zeros, ones)).T
+
+    x_c = T @ world_corners
+    x_h = distort_corners(x_c, k1, k2)
+    m_hat = A @ x_h
+    m_hat = m_hat/m_hat[2]
+    return m_hat
+
+def projection_error(transformation,A,k1,k2,img_corners,world_corners):
+    """ 
+    description:
+        computes projection error for an image
+    input:
+        x - 6, vector of all transformation parameters
+        k1,k2 - distortion coefficients
+        img_corners - M x 2
+        world_corners - M x2
+    output:
+        residuals - 14,1
+    """
+    m_hat = get_projection(transformation,A,k1,k2, world_corners)
+    M = world_corners.shape[0]
+    ones = np.ones((M,1))
+    img_corners = np.hstack((img_corners, ones)).T
+    error = img_corners - m_hat
+    error = np.linalg.norm(error,axis=0,ord=2)
+    return error
+
+def get_projection(transformations,A,k1,k2,world_corners):
+    projections = []
+    for transformation in transformations:
+        projections.append(get_projection(transformation,A,k1,k2,world_corners))
+    return projections
+
+def compute_residuals(x, imgs_corners,world_corners,per_img=False):
+    """ 
+    description:
+        callable functional to calculate residuals
+    input:
+        if N - number of images
+            M - number of features per image 
+            nP - number of parameters required for transformation
+                = 3(rotation rodrigues) +3(translation)
+        x - 5(intrinsics) + 2(distortion) + N*nP
+        imgs_corner - N x M x 2
+        world_corners - M x 2
+    output:
+        residuals - N*M*nP
+    """
+    n_imgs = len(imgs_corners)
+    n_feats = len(world_corners)
+
+    A,k1,k2,transformations = dissect_x_vector(x,n_imgs)
+    errors =[]
+    for i in range(n_imgs):
+        error = projection_error(transformations[i,:],A,k1,k2,imgs_corners[i],world_corners)
+        if per_img:
+            error = np.sum(error)
+        errors.append(error)
+
+    if not per_img:
+        errors = np.concatenate(errors)
+    return errors
