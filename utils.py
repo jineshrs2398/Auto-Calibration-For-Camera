@@ -331,8 +331,8 @@ def compute_residuals(x, imgs_corners,world_corners,per_img=False):
     return errors
 
 def filter_coords(u_grid_old,v_grid_old,u_grid,v_grid,img_shape):
-    inds_max_v = np.argswhere(v_grid_old>img_shape[0]-1)
-    inds_max_u = np.argswhere(u_grid_old>img_shape[1]-1)
+    inds_max_v = np.argwhere(v_grid_old>img_shape[0]-1)
+    inds_max_u = np.argwhere(u_grid_old>img_shape[1]-1)
 
     inds_max = np.concatenate((inds_max_v, inds_max_u)).flatten().tolist()
     exclude_inds = list(set(tuple(inds_max)))
