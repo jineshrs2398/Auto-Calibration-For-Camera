@@ -18,7 +18,9 @@ def main(args):
     square_size = 21.5
     pattern_size = (9,6)
 
+    # Load images
     imgs,imgs_names = get_images(base_path,input_extn)
+    # Get world coordinates
     world_corners = get_world_corners(pattern_size,square_size)
     imgs_corners = [get_chessboard_corners(img,pattern_size,name,args) for img,name in zip(imgs,imgs_names)]
     homography_list = [get_homography(img_corners,world_corners,name) for img_corners,name in zip(imgs_corners,imgs_names)]
